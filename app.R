@@ -9,20 +9,20 @@ library(plyr)
 library(ggplot2)
 
 #read in raw data
-life <- read.csv('API_SP.DYN.LE00.IN_DS2_en_csv_v2.csv', skip=3)[,1:59]
-life <- subset(life,select=-c(Indicator.Name, Indicator.Code, Country.Name))
+life <- read.csv('API_SP.DYN.LE00.IN_DS2_en_csv_v2.csv', skip=3, stringsAsFactors = FALSE)[,1:59]
+life <- subset(life,select=-c(Indicator.Name, Indicator.Code, Country.Code))
 colnames(life) <- c("Country", seq(1960, 2014))
 
-fertility<- read.csv('API_SP.DYN.TFRT.IN_DS2_en_csv_v2.csv', skip=3)[,1:59]
-fertility <- subset(fertility,select=-c(Indicator.Name, Indicator.Code,Country.Name))
+fertility<- read.csv('API_SP.DYN.TFRT.IN_DS2_en_csv_v2.csv', skip=3,stringsAsFactors = FALSE)[,1:59]
+fertility <- subset(fertility,select=-c(Indicator.Name, Indicator.Code,Country.Code))
 colnames(fertility) <- c("Country", seq(1960, 2014))
 
-pop <- read.csv('API_SP.POP.TOTL_DS2_en_csv_v2.csv',skip=3)[,1:59]
-pop <- subset(pop,select=-c(Indicator.Name, Indicator.Code,Country.Name))
+pop <- read.csv('API_SP.POP.TOTL_DS2_en_csv_v2.csv',skip=3,stringsAsFactors = FALSE)[,1:59]
+pop <- subset(pop,select=-c(Indicator.Name, Indicator.Code,Country.Code))
 colnames(pop) <- c("Country", seq(1960, 2014))
 
-region <- read.csv('Metadata_Country_API_SP.DYN.LE00.IN_DS2_en_csv_v2.csv')[,1:2]
-colnames(region) <- c("Country","Region")
+region <- read.csv('Metadata_Country_API_SP.DYN.LE00.IN_DS2_en_csv_v2.csv',stringsAsFactors = FALSE)[,c(2,5)]
+colnames(region) <- c("Region","Country")
 
 #melt 
 life <- melt(life)
@@ -39,14 +39,13 @@ df <- merge(life,fertility,by = c("Country", "Year"))
 df <- merge(df,pop,by = c("Country", "Year"))
 df <- merge(df,region,by = "Country")
 df$Year <- as.integer(as.character(df$Year))
-
-Region_names <- levels(region$Region)
+Region_names <- unique(region$Region)
 
 limits <- c()
-limits$lifemin = min(df$Life, na.rm=T)
-limits$lifemax = max(df$Life, na.rm=T)
-limits$fertilitymin = min(df$Fertility, na.rm=T)
-limits$fertilitymax = max(df$Fertility, na.rm=T)
+limits$lifemin = 0
+limits$lifemax = 100
+limits$fertilitymin = 0
+limits$fertilitymax = 28
 
 ui <- fluidPage(
   headerPanel('World Development Indicators Trend by Country '),
@@ -63,13 +62,10 @@ ui <- fluidPage(
 )
 
 server <- function(input, output) {
-  sub_df <- reactive({df[df$Year == input$year & df$Region %in% input$Region_names, ]})
+  sub_df <- reactive({df[df$Year == input$year & df$Region %in% input$regions, ]})
+
   
-  output$info <- renderText({
-    paste0("year=", input$year, "\nnrow(sub_df)=", nrow(sub_df))
-  })
-  
-  all_values <- function(x) {
+  hover <- function(x) {
     if(is.null(x)) return(NULL)
     row <- df[df$Life == x$Life & df$Fertility == x$Fertility & !is.na(df$Life) & !is.na(df$Fertility), ]
     paste0(row$Country)
@@ -78,13 +74,13 @@ server <- function(input, output) {
   sub_df %>% 
     ggvis(x = ~Life, y = ~Fertility, fill = ~factor(Region), size = ~Population) %>%
     layer_points() %>%
-    add_axis("x", title = "Life Expectancy (years per human body)") %>%
-    add_axis("y", title = "Fertility Rate (babies per woman)") %>%
+    add_axis("x", title = "Life Expectancy") %>%
+    add_axis("y", title = "Fertility Rate") %>%
     add_legend("fill", title="Region", properties = legend_props(legend = list(y = 150))) %>%
     add_legend("size", title="Population", properties = legend_props(legend = list(y = 50))) %>%
-    add_tooltip(all_values, "hover") %>%
-    scale_numeric("x", domain = c(limits$lifemin, limits$lifemax), nice = T) %>%
-    scale_numeric("y", domain = c(limits$fertilitymin, limits$fertilitymax), nice = T) %>%
+    add_tooltip(hover, "hover") %>%
+    scale_numeric("x", domain = c(limits$lifemin, limits$lifemax), nice = F) %>%
+    scale_numeric("y", domain = c(limits$fertilitymin, limits$fertilitymax), nice = F) %>%
     set_options(duration=0) %>%
     bind_shiny("ggvis", "ggvis_ui")
   
